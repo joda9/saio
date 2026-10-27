@@ -24,8 +24,8 @@ table names.
 `saio.register_schema` instantiates a declarative base using
 
   ```python
-  from sqlalchemy.ext.declarative import declarative_base
-  Base = declarative_base(bind=engine)
+  from sqlalchemy.orm import declarative_base
+  Base = declarative_base()
   # The Base can be imported using from saio.model_draft import Base
   ```
 
@@ -36,7 +36,7 @@ approximately
   ```python
   class LisChargingPoi(Base):
       __tablename__ =  'lis_charging_poi'
-      __table_args__ = {'schema': 'model_draft', 'autoload': True}
+      __table_args__ = {'schema': 'model_draft', 'autoload_with': engine}
   ```
 """
 
@@ -46,8 +46,12 @@ __url__         = "https://github.com/coroa/saio/blob/master/saio.py"
 __author__      = "coroa"
 
 import sqlalchemy as sa
-import sqlalchemy.ext.declarative
-import sqlalchemy.engine.reflection
+
+try:
+    from sqlalchemy.orm import declarative_base
+except ImportError:
+    # SQLAlchemy < 1.4
+    from sqlalchemy.ext.declarative import declarative_base
 
 import warnings
 from types import ModuleType
@@ -77,12 +81,14 @@ class SchemaInspectorModule(ModuleType):
 
         self.schema = schema
         self.engine = engine
-        self.Base = sa.ext.declarative.declarative_base(bind=engine)
+        # SQLAlchemy 2.0 removed bound metadata; the engine is passed to the
+        # reflection instead
+        self.Base = declarative_base()
         self.Meta = self.Base.metadata
 
     @memoize
     def __dir__(self):
-        insp = sa.engine.reflection.Inspector.from_engine(self.engine)
+        insp = sa.inspect(self.engine)
         return insp.get_table_names(self.schema) + insp.get_view_names(self.schema)
 
     @memoize
@@ -93,7 +99,7 @@ class SchemaInspectorModule(ModuleType):
 
         # Idea for treating views from https://hultner.se/quickbits/2017-10-23-postgresql-reflection-views-python-sqlalchemy.html
 
-        tab = sa.Table(name, self.Meta, autoload=True, schema=self.schema)
+        tab = sa.Table(name, self.Meta, autoload_with=self.engine, schema=self.schema)
         attrs = {'__module__': self.__name__,
                  '__table__': tab}
         if not tab.primary_key:
