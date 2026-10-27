@@ -130,11 +130,18 @@ except ImportError:
 
 try:
     import geopandas as gpd
+    import shapely
     import shapely.wkb
-    import shapely.geos
     has_geopandas = True
 except ImportError:
     has_geopandas = False
+
+def _get_srid(geom):
+    if hasattr(shapely, "get_srid"):
+        # Shapely 2.0+, which removed shapely.geos.lgeos
+        return shapely.get_srid(geom)
+    from shapely.geos import lgeos
+    return lgeos.GEOSGetSRID(geom._geom)
 
 def as_pandas(query, index_col=None, coerce_float=True, params=None,
               geometry='geom', crs=None, hex_encoded=True):
@@ -204,7 +211,7 @@ def as_pandas(query, index_col=None, coerce_float=True, params=None,
 
         srid = getattr(obj, 'srid', -1)
         if srid == -1:
-            srid = shapely.geos.lgeos.GEOSGetSRID(load_geom(obj)._geom)
+            srid = _get_srid(load_geom(obj))
 
         if crs is None and srid != 0:
             crs = dict(init="epsg:{}".format(srid))
